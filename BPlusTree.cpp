@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define F_OK 0 /* Test for existence. */
+
 #ifdef WIN32
 	#include <io.h>
 #endif
