@@ -24,8 +24,8 @@ int main()
 	printf("\n\n");
 	
  	printf("display about B+ Tree:\n");
-	bt.level_display();
-	bt.inorder_print();
+	bpt.level_display();
+	bpt.inorder_print();
 	printf("\n");
 	bpt.linear_print();
 	printf("\n");
