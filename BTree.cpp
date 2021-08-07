@@ -21,19 +21,20 @@ btree_node* BTree::btree_node_new()
 	}
 
 	for(int i = 0; i < 2 * M -1; i++) {
-		node->k[i] = 0;
+		node->k[i] = 0;  //关键字的全为0, 由于后面给number of keys赋了0, 所以这里并不会引起错误访问
 	}
 
 	for(int i = 0; i < 2 * M; i++) {
-		node->p[i] = NULL;
+		node->p[i] = NULL;  //p应该是pointer的意思, 指的是孩子节点(命名并不好, 容易跟parent混淆)
 	}
 
-	node->num = 0;
+	node->num = 0;  //应该指的number of keys = 0, 这样, 就算给key赋了初值0, 但是并访问不到
 	node->is_leaf = true;     //默认为叶子 
 
 	return node;
 }
 
+//TODO: 这个功能跟上一个btree_node_new是不是完全重复了. 属于过度封装了吧. 
 btree_node* BTree::btree_create()
 {
 	btree_node *node = btree_node_new();
@@ -45,8 +46,9 @@ btree_node* BTree::btree_create()
 
 int BTree::btree_split_child(btree_node *parent, int pos, btree_node *child)
 {
+	//第1/2步, 依据要分裂的, 被装满的子节点child建立新节点new_child
 	btree_node *new_child = btree_node_new();
-	if(NULL == new_child) {
+	if(NULL == new_child) {  //这里返回NULL应该是没有内存了?
 		return -1;
 	}
 	// 新节点的is_leaf与child相同，key的个数为M-1
@@ -54,6 +56,8 @@ int BTree::btree_split_child(btree_node *parent, int pos, btree_node *child)
 	new_child->num = M - 1;
 
 	// 将child后半部分的key拷贝给新节点
+	// 位于正中间的(第M个)key的下标为M - 1, 因此拷贝从M下标开始, 到2M - 2下标(第M - 1, 也即末个key)结束, 共M - 1个key
+
 	for(int i = 0; i < M - 1; i++) {
 		new_child->k[i] = child->k[i+M];
 	}
@@ -65,13 +69,15 @@ int BTree::btree_split_child(btree_node *parent, int pos, btree_node *child)
 		}
 	}
 
-	child->num = M - 1;
+	child->num = M - 1;  //孩子最后剩M-1个,因为是从满孩子节点执行分裂的.
 
+	// 第2 / 2步, p_node的关键字和孩子节点分别右移, 并装入新的.
 	// child的中间节点需要插入parent的pos处，更新parent的key和pointer
 	for(int i = parent->num; i > pos; i--) {
 		parent->p[i+1] = parent->p[i];
 	}
-	parent->p[pos+1] = new_child;
+
+	parent->p[pos+1] = new_child;  //新key的索引pos, 新child的是pos+1
 
 	for(int i = parent->num - 1; i >= pos; i--) {
 		parent->k[i+1] = parent->k[i];
@@ -82,11 +88,11 @@ int BTree::btree_split_child(btree_node *parent, int pos, btree_node *child)
 	return 0;
 }
 
-// 执行该操作时，node->num < 2M-1 
+// 执行该操作时，node->num < 2M-1. (插入从顶层开始, 如果顶层不满, 走进这里; 如果顶层满, 分裂后再走进这里)
 void BTree::btree_insert_nonfull(btree_node *node, int target)
 {
 	if(1 == node->is_leaf) {
-		// 如果在叶子中找到，直接删除
+		// 如果在叶子中找到，直接插入
 		int pos = node->num;
 		while(pos >= 1 && target < node->k[pos-1]) {
 			node->k[pos] = node->k[pos-1];
@@ -95,7 +101,7 @@ void BTree::btree_insert_nonfull(btree_node *node, int target)
 
 		node->k[pos] = target;
 		node->num += 1;
-		btree_node_num+=1;
+		btree_node_num+=1;  //TODO: 这个btree_node_num跟踪的是哪个值?
 		
 	} else {
 		// 沿着查找路径下降
@@ -117,6 +123,10 @@ void BTree::btree_insert_nonfull(btree_node *node, int target)
 }
 
 //插入入口
+//相对于python版实现, 这里:
+//TODO: 没有事先判断key是否重复
+//TODO: 没有设置新节点的number of keys, 不知道初始化的时候有没有定义, 回头看一下
+//TODO: 这里不是void, 而是把root节点返回了. 
 btree_node* BTree::btree_insert(btree_node *root, int target)
 {
 	if(NULL == root) {
@@ -166,7 +176,7 @@ void BTree::btree_merge_child(btree_node *root, int pos, btree_node *y, btree_no
 	}
 
 	root->num -= 1;
-	free(z);
+	free(z);  //TODO: free(z)是释放内存?
 }
 
 /************  删除分析   **************
