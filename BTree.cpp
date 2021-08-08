@@ -199,20 +199,20 @@ btree_node* BTree::btree_delete(btree_node* root, int target)
 {
 	// 特殊处理，当根只有两个子女，切两个子女的关键字个数都为M-1时，合并根与两个子女
 	// 这是唯一能降低树高的情形
-	if(1 == root->num) {
+	if(1 == root->num) {  //这种情况下要改根节点
 		btree_node *y = root->p[0];
 		btree_node *z = root->p[1];
-		if(NULL != y && NULL != z &&
+		if(NULL != y && NULL != z &&  //这里应该是 与判断 从前向后走, 当y, z为空时直接返回0, 不会再继续往下找其num属性了, 就不会因此而发生错误. 
 			M - 1 == y->num && M - 1 == z->num) {
 				btree_merge_child(root, 0, y, z);
 				free(root);
 				btree_delete_nonone(y, target);
 				return y;
-		} else {
+		} else {  //两个节点都为空(有一个key. 要么两个孩子都为空(没孩子); 要么两个孩子都不为空. 不可能只有一个孩子.); 或者两个孩子的关键字有一个大于M-1(左右子树至少有一个够借, 树不用坍塌)
 			btree_delete_nonone(root, target);
 			return root;
 		}
-	} else {
+	} else {  //这种情况下不用改根节点
 		btree_delete_nonone(root, target);	
 		return root;
 	}
@@ -236,7 +236,7 @@ void BTree::btree_delete_nonone(btree_node *root, int target)
 		} else {
 			printf("target not found\n");
 		}
-	} else {
+	} else {  //root不是叶子结点
 		int i = 0;
 		btree_node *y = NULL, *z = NULL;
 		while(i < root->num && target > root->k[i]) i++;
@@ -262,34 +262,37 @@ void BTree::btree_delete_nonone(btree_node *root, int target)
 				btree_delete(y, target);
 			}
 		} else {
-			// 在分支没有找到，肯定在分支的子节点中
+			// 在分支没有找到，肯定在分支的子节点(p[i])中
 			y = root->p[i];
-			if(i < root->num) {
+			if(i < root->num) {  //如果i不是最后一个孩子节点, 也即i孩子在最后一个关键字的左边, 或更左的位置
 				z = root->p[i+1];
 			}
 			btree_node *p = NULL;
 			if(i > 0) {
-				p = root->p[i-1];
+				p = root->p[i-1];  //如果i不是第一个孩子节点(下标为0), 那么定义一个前节点指针p. 
 			}
 
-			if(y->num == M - 1) {
+			if(y->num == M - 1) {  //这三种情况是: 如果确定了要删除的节点在y分支上, 先满足其关键字大于m-1, 防止向上级节点回溯, 出现(不拆了树重建的情况下)无法操作的情况, 
+				//因为不一级级保证节点数大于m-1, 上级也没法被借, 或者借了还要往更上级借关键字, 还牵涉到孩子的情况, 导致应该是无解的局面, 除非拆树重建. 
 				if(i > 0 && p->num > M - 1) {
-					// 左邻接节点关键字个数大于M-1
+					// 左邻接节点关键字个数大于M-1(左兄弟够借)
 					//情况3(a)
 					btree_shift_to_right_child(root, i-1, p, y);
 				} else if(i < root->num && z->num > M - 1) {
-					// 右邻接节点关键字个数大于M-1
+					// 右邻接节点关键字个数大于M-1(右兄弟够借)
 					// 情况3(b)
 					btree_shift_to_left_child(root, i, y, z);
 				} else if(i > 0) {
 					// 情况3（c)
-					btree_merge_child(root, i-1, p, y); // note
-					y = p;
+					//i > 0, 左兄弟存在. 跟左兄弟合并
+					btree_merge_child(root, i-1, p, y);
+					y = p;  //TODO: 这里y换成左兄弟用途是什么?
 				} else {
 					// 情况3(c)
+					//i=0, 只能跟右兄弟合并. 
 					btree_merge_child(root, i, y, z);
 				}
-				btree_delete_nonone(y, target);
+				btree_delete_nonone(y, target);  //这个时候查找已经下降了一层, 从y中删除. 转回到 "如果在分支节点找到target" 的情况
 			} else {
 				btree_delete_nonone(y, target);
 			}
@@ -299,7 +302,7 @@ void BTree::btree_delete_nonone(btree_node *root, int target)
 }
 
 //寻找rightmost，以root为根的最大关键字
-int BTree::btree_search_predecessor(btree_node *root)
+int BTree::btree_search_predecessor(btree_node *root)  //predecessor前驱, 前驱是左兄弟最后面
 {
 	btree_node *y = root;
 	while(false == y->is_leaf) {
@@ -309,7 +312,7 @@ int BTree::btree_search_predecessor(btree_node *root)
 }
 
 // 寻找leftmost，以root为根的最小关键字
-int BTree::btree_search_successor(btree_node *root) 
+int BTree::btree_search_successor(btree_node *root)  //successor后继, 后继是右兄弟最前面
 {
 	btree_node *z = root;
 	while(false == z->is_leaf) {
@@ -347,8 +350,8 @@ void BTree::btree_shift_to_left_child(btree_node *root, int pos,
 	y->k[y->num-1] = root->k[pos];
 	root->k[pos] = z->k[0];
 
-	for(int j = 1; j < z->num; j++) {
-		z->k[j-1] = z->k[j];
+	for(int j = 1; j < z->num; j++) {  //这个作者的思路是, 哪些位置的值被移动, 就索引哪些位置
+		z->k[j-1] = z->k[j];  //对应的, 等式左边是到达的位置的索引, 右边是出发的位置的索引, 也就是j本身. 
 	}
 
 	if(false == z->is_leaf) {
