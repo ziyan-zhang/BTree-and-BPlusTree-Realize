@@ -155,12 +155,12 @@ btree_node* BTree::btree_insert(btree_node *root, int target)
 // 将y，root->k[pos], z合并到y节点，并释放z节点，y,z各有M-1个节点
 void BTree::btree_merge_child(btree_node *root, int pos, btree_node *y, btree_node *z)
 {
-	// 将z中节点拷贝到y的后半部分
+	// 将z中节点拷贝到y的后半部分, k[pos]下降为y的中间节点
 	y->num = 2 * M - 1;
 	for(int i = M; i < 2 * M - 1; i++) {
 		y->k[i] = z->k[i-M];
 	}
-	y->k[M-1] = root->k[pos];// k[pos]下降为y的中间节点
+	y->k[M-1] = root->k[pos];
 
 	// 如果z非叶子，需要拷贝pointer
 	if(false == z->is_leaf) {
@@ -169,7 +169,7 @@ void BTree::btree_merge_child(btree_node *root, int pos, btree_node *y, btree_no
 		}
 	}
 
-	// k[pos]下降到y中，更新key和pointer
+	// 由于k[pos]下降到y中，更新key和pointer
 	for(int j = pos + 1; j < root->num; j++) {
 		root->k[j-1] = root->k[j];
 		root->p[j] = root->p[j+1];
@@ -219,10 +219,11 @@ btree_node* BTree::btree_delete(btree_node* root, int target)
 }
 
 // root至少有个t个关键字，保证不会回溯
+//TODO: 这里没有提前查找target是否存在, 但是查找的话又费额外的时间
 void BTree::btree_delete_nonone(btree_node *root, int target)
 {
 	if(true == root->is_leaf) {
-		// 如果在叶子节点，直接删除
+		// 如果已经查找到了叶子节点，直接通过覆写和改num of keys删除
 		int i = 0;
 		while(i < root->num && target > root->k[i]) i++;
 		if(target == root->k[i]) {
@@ -259,7 +260,7 @@ void BTree::btree_delete_nonone(btree_node *root, int target)
 			} else {
 				// 两个分支节点数都为M-1，则合并至y，并在y中递归删除target,情况2(c)
 				btree_merge_child(root, i, y, z);
-				btree_delete(y, target);
+				btree_delete_nonone(y, target);  //应该不用走到btree_delete吧, 这里y不可能只有一个关键字
 			}
 		} else {
 			// 在分支没有找到，肯定在分支的子节点(p[i])中
@@ -272,24 +273,27 @@ void BTree::btree_delete_nonone(btree_node *root, int target)
 				p = root->p[i-1];  //如果i不是第一个孩子节点(下标为0), 那么定义一个前节点指针p. 
 			}
 
+			// 注意这里的y_num可以=M-1, 要借点才能进行下一步. 或者＞M-1, 不借点即可进行下一步. 下一步: {当前分支节点找到了, 通过前驱后继删除; 没找到: 下沉继续找} 
+			// 或者<M-1, 这就是叶子节点(下沉的终极形态, 除非半路在分支中被找到了)了, 更好删除. 后两种情况统一
 			if(y->num == M - 1) {  //这三种情况是: 如果确定了要删除的节点在y分支上, 先满足其关键字大于m-1, 防止向上级节点回溯, 出现(不拆了树重建的情况下)无法操作的情况, 
 				//因为不一级级保证节点数大于m-1, 上级也没法被借, 或者借了还要往更上级借关键字, 还牵涉到孩子的情况, 导致应该是无解的局面, 除非拆树重建. 
 				if(i > 0 && p->num > M - 1) {
-					// 左邻接节点关键字个数大于M-1(左兄弟够借)
+					// 左邻接节点关键字个数大于M-1(有能借的左兄弟)
 					//情况3(a)
 					btree_shift_to_right_child(root, i-1, p, y);
 				} else if(i < root->num && z->num > M - 1) {
-					// 右邻接节点关键字个数大于M-1(右兄弟够借)
+					// 右邻接节点关键字个数大于M-1(没有能借的左兄弟, 有能借的右兄弟)
 					// 情况3(b)
 					btree_shift_to_left_child(root, i, y, z);
 				} else if(i > 0) {
-					// 情况3（c)
-					//i > 0, 左兄弟存在. 跟左兄弟合并
+					// 情况3（c), 左右兄弟都不能借, 只能合并了. 先看看左兄弟有没有, 有就合并到左兄弟上, 没有就将右兄弟合并过来
+					//注意B数关键字数一定大于等于M-1. 左右兄弟都不能借(关键字为M-1个), 但是左兄弟存在, 先合并到左兄弟上. 
+					//i > 0, 左兄弟存在. (没有能借的左或右兄弟, 有不能借(恰好M-1个关键字的)的左兄弟)
 					btree_merge_child(root, i-1, p, y);
 					y = p;  //TODO: 这里y换成左兄弟用途是什么?
 				} else {
 					// 情况3(c)
-					//i=0, 只能跟右兄弟合并. 
+					//i=0, 没有左兄弟. (只有不能借的右兄弟)
 					btree_merge_child(root, i, y, z);
 				}
 				btree_delete_nonone(y, target);  //这个时候查找已经下降了一层, 从y中删除. 转回到 "如果在分支节点找到target" 的情况
